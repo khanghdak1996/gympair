@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>GymPair</title>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="GymPair"/>
+<meta name="theme-color" content="#D85A30"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body,#root{height:100%;width:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#fff;overflow:hidden}
+input,button,textarea{font-family:inherit}
+input:focus,button:focus{outline:none}
+button:active{opacity:.7}
+::-webkit-scrollbar{display:none}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">
+import{h,render,Fragment}from'https://esm.sh/preact@10';
+import{useState,useEffect,useRef}from'https://esm.sh/preact@10/hooks';
+import htm from'https://esm.sh/htm@3';
+const html=htm.bind(h);
+
+// ── Data ────────────────────────────────────────────────────
+const EX=[
+  {id:'bench-press',name:'Bench Press',g:'Ngực'},
+  {id:'incline-bench',name:'Incline Bench Press',g:'Ngực'},
+  {id:'cable-fly',name:'Cable Fly',g:'Ngực'},
+  {id:'push-up',name:'Push-up',g:'Ngực'},
+  {id:'dumbbell-fly',name:'Dumbbell Fly',g:'Ngực'},
+  {id:'squat',name:'Squat',g:'Chân'},
+  {id:'leg-press',name:'Leg Press',g:'Chân'},
+  {id:'rdl',name:'Romanian Deadlift',g:'Chân'},
+  {id:'leg-curl',name:'Leg Curl',g:'Chân'},
+  {id:'leg-ext',name:'Leg Extension',g:'Chân'},
+  {id:'calf-raise',name:'Calf Raise',g:'Chân'},
+  {id:'deadlift',name:'Deadlift',g:'Lưng'},
+  {id:'barbell-row',name:'Barbell Row',g:'Lưng'},
+  {id:'lat-pull',name:'Lat Pulldown',g:'Lưng'},
+  {id:'pull-up',name:'Pull-up',g:'Lưng'},
+  {id:'seated-row',name:'Seated Cable Row',g:'Lưng'},
+  {id:'ohp',name:'Overhead Press',g:'Vai'},
+  {id:'lateral-raise',name:'Lateral Raise',g:'Vai'},
+  {id:'face-pull',name:'Face Pull',g:'Vai'},
+  {id:'front-raise',name:'Front Raise',g:'Vai'},
+  {id:'bicep-curl',name:'Barbell Curl',g:'Tay'},
+  {id:'db-curl',name:'Dumbbell Curl',g:'Tay'},
+  {id:'hammer-curl',name:'Hammer Curl',g:'Tay'},
+  {id:'tricep-push',name:'Tricep Pushdown',g:'Tay'},
+  {id:'skull-crusher',name:'Skull Crusher',g:'Tay'},
+  {id:'hip-thrust',name:'Hip Thrust',g:'Mông'},
+  {id:'glute-bridge',name:'Glute Bridge',g:'Mông'},
+  {id:'plank',name:'Plank (giây)',g:'Bụng'},
+  {id:'crunch',name:'Crunch',g:'Bụng'},
+  {id:'cable-crunch',name:'Cable Crunch',g:'Bụng'},
+];
+const PR=[
+  {id:'anh',name:'Anh',e:'💪',c:'#2563EB'},
+  {id:'em',name:'Em',e:'🌸',c:'#DB2777'},
+];
+const ACC='#D85A30';
+
+// ── Utils ───────────────────────────────────────────────────
+const uid=()=>Math.random().toString(36).slice(2,8);
+const p2=n=>String(Math.floor(Math.abs(n))).padStart(2,'0');
+const fT=s=>`${p2(s/60)}:${p2(s%60)}`;
+const fD=d=>{try{return new Date(d+'T00:00:00').toLocaleDateString('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit'});}catch{return d;}};
+const durS=ms=>{const m=Math.floor(ms/60000);return m<60?`${m} phút`:`${Math.floor(m/60)}h${m%60>0?' '+m%60+'m':''}`;};
+const sVol=s=>(parseFloat(s.weight)||0)*(parseInt(s.reps)||0);
+const eVol=e=>e.sets.filter(s=>s.done).reduce((t,s)=>t+sVol(s),0);
+const tVol=exs=>exs.reduce((t,e)=>t+eVol(e),0);
+
+// ── Storage ─────────────────────────────────────────────────
+const db={
+  async get(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},
+  async set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
+};
+
+// ── Styles ──────────────────────────────────────────────────
+const C={
+  bg1:'#ffffff',bg2:'#f5f5f5',bg3:'#ececec',
+  txt1:'#111111',txt2:'#666666',txt3:'#aaaaaa',
+  bdr:'#e5e5e5',bdr2:'#cccccc',
+  green:'#22c55e',greenBg:'#f0fdf4',
+  redBg:'#fff0f0',red:'#d32f2f',
+};
+const r={sm:'6px',md:'8px',lg:'12px',xl:'16px'};
+
+// ── Shared Components ───────────────────────────────────────
+const Wrap=({children,cx})=>html`
+  <div style=${{fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',height:'100dvh',display:'flex',flexDirection:'column',overflow:'hidden',background:C.bg1,color:C.txt1,maxWidth:500,margin:'0 auto',...cx}}>
+    ${children}
+  </div>`;
+
+const Card=({children,cx,onClick})=>html`
+  <div onClick=${onClick} style=${{background:C.bg2,borderRadius:r.lg,padding:'12px 14px',marginBottom:10,...cx}}>
+    ${children}
+  </div>`;
+
+const Empty=({icon,msg,sub})=>html`
+  <${Card} cx=${{textAlign:'center',padding:'32px 16px'}}>
+    <div style=${{fontSize:36,marginBottom:10}}>${icon}</div>
+    <p style=${{margin:'0 0 4px',color:C.txt2,fontSize:14,fontWeight:500}}>${msg}</p>
+    ${sub&&html`<p style=${{margin:0,color:C.txt3,fontSize:13}}>${sub}</p>`}
+  </${Card}>`;
+
+const Label=({t,mt=0})=>html`
+  <p style=${{margin:`${mt}px 0 8px`,fontSize:11,fontWeight:600,color:C.txt3,letterSpacing:'0.07em',textTransform:'uppercase'}}>${t}</p>`;
+
+const Btn=({children,onClick,cx,variant='primary'})=>{
+  const vs={
+    primary:{background:ACC,color:'#fff',border:'none',padding:'10px 18px'},
+    ghost:{background:C.bg2,color:C.txt1,border:`1px solid ${C.bdr2}`,padding:'9px 14px'},
+    danger:{background:C.redBg,color:C.red,border:'none',padding:'7px 12px'},
+    icon:{background:'transparent',color:C.txt2,border:`1px solid ${C.bdr}`,padding:'7px 12px'},
+  };
+  return html`<button onClick=${onClick} style=${{borderRadius:r.md,cursor:'pointer',fontWeight:500,fontSize:14,...vs[variant],...cx}}>${children}</button>`;
+};
+
+// ── Profile Select ──────────────────────────────────────────
+function ProfileSelect({onSel}){
+  return html`
+    <${Wrap} cx=${{alignItems:'center',justifyContent:'center',padding:28}}>
+      <div style=${{fontSize:48,marginBottom:10}}>🏋️</div>
+      <h1 style=${{margin:'0 0 6px',fontSize:28,fontWeight:700}}>GymPair</h1>
+      <p style=${{margin:'0 0 44px',color:C.txt2,fontSize:15}}>Chọn hồ sơ của bạn</p>
+      <div style=${{display:'flex',gap:16,width:'100%',maxWidth:290}}>
+        ${PR.map(p=>html`
+          <button key=${p.id} onClick=${()=>onSel(p.id)} style=${{
+            flex:1,padding:'28px 12px',borderRadius:20,
+            border:`2px solid ${p.c}30`,background:`${p.c}0C`,
+            cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:12
+          }}>
+            <span style=${{fontSize:48}}>${p.e}</span>
+            <span style=${{fontSize:18,fontWeight:700,color:p.c}}>${p.name}</span>
+          </button>`
+        )}
+      </div>
+    </${Wrap}>`;
+}
+
+// ── Tab Bar ─────────────────────────────────────────────────
+function TabBar({tab,onTab}){
+  const tabs=[
+    {id:'home',l:'Trang chủ',i:'🏠'},
+    {id:'progs',l:'Chương trình',i:'📋'},
+    {id:'hist',l:'Lịch sử',i:'📊'},
+  ];
+  return html`
+    <nav style=${{display:'flex',borderTop:`1px solid ${C.bdr}`,background:C.bg1,flexShrink:0,paddingBottom:'env(safe-area-inset-bottom)'}}>
+      ${tabs.map(t=>html`
+        <button key=${t.id} onClick=${()=>onTab(t.id)} style=${{
+          flex:1,padding:'10px 0 12px',border:'none',background:'transparent',cursor:'pointer',
+          display:'flex',flexDirection:'column',alignItems:'center',gap:4,
+          color:tab===t.id?ACC:C.txt3,
+        }}>
+          <span style=${{fontSize:22}}>${t.i}</span>
+          <span style=${{fontSize:10,fontWeight:600}}>${t.l}</span>
+        </button>`
+      )}
+    </nav>`;
+}
+
+// ── Home Tab ────────────────────────────────────────────────
+function HomeTab({profile,progs,sessions,onStart,onView,onSwitch}){
+  return html`
+    <div style=${{padding:'22px 16px'}}>
+      <div style=${{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:24}}>
+        <div>
+          <p style=${{margin:0,color:C.txt3,fontSize:12}}>Xin chào,</p>
+          <h2 style=${{margin:0,fontSize:23,fontWeight:700}}>${profile.name} ${profile.e}</h2>
+        </div>
+        <${Btn} onClick=${onSwitch} variant="icon" cx=${{fontSize:12}}>Đổi hồ sơ</${Btn}>
+      </div>
+      <${Label} t="Bắt đầu tập"/>
+      ${progs.length===0
+        ?html`<${Empty} icon="📋" msg="Chưa có chương trình" sub="Vào tab Chương trình để tạo mới"/>`
+        :progs.map(prog=>html`
+          <${Card} key=${prog.id}>
+            <p style=${{margin:'0 0 10px',fontSize:15,fontWeight:600}}>${prog.name}</p>
+            <div style=${{display:'flex',gap:8,flexWrap:'wrap'}}>
+              ${prog.days.map((d,i)=>html`
+                <button key=${i} onClick=${()=>onStart(prog,i)} style=${{
+                  padding:'9px 16px',borderRadius:r.md,border:'none',
+                  background:ACC,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',
+                }}>▶ ${d.name}</button>`
+              )}
+            </div>
+          </${Card}>`
+        )
+      }
+      ${sessions.length>0&&html`
+        <${Label} t="Gần đây" mt=${20}/>
+        ${sessions.slice(0,3).map(s=>html`
+          <${Card} key=${s.id} onClick=${()=>onView(s)} cx=${{cursor:'pointer'}}>
+            <div style=${{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div>
+                <p style=${{margin:'0 0 2px',fontSize:14,fontWeight:600}}>${s.dayName}</p>
+                <p style=${{margin:0,color:C.txt2,fontSize:12}}>${s.progName} · ${fD(s.date)}</p>
+              </div>
+              <div style=${{textAlign:'right'}}>
+                <p style=${{margin:'0 0 2px',fontSize:14,fontWeight:700,color:ACC}}>${Math.round(s.totalVol||0)} kg</p>
+                <p style=${{margin:0,color:C.txt3,fontSize:12}}>${durS(s.endTime-s.startTime)}</p>
+              </div>
+            </div>
+          </${Card}>`
+        )}
+      `}
+    </div>`;
+}
+
+// ── Programs Tab ────────────────────────────────────────────
+function ProgsTab({progs,onNew,onDel,onStart}){
+  return html`
+    <div style=${{padding:'22px 16px'}}>
+      <div style=${{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+        <h2 style=${{margin:0,fontSize:22,fontWeight:700}}>Chương trình</h2>
+        <${Btn} onClick=${onNew}>+ Tạo mới</${Btn}>
+      </div>
+      ${progs.length===0
+        ?html`<${Empty} icon="📋" msg="Chưa có chương trình" sub='Nhấn "+ Tạo mới" để bắt đầu'/>`
+        :progs.map(prog=>html`
+          <${Card} key=${prog.id}>
+            <div style=${{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <p style=${{margin:0,fontSize:15,fontWeight:600}}>${prog.name}</p>
+              <button onClick=${()=>{if(window.confirm(`Xoá "${prog.name}"?`))onDel(prog.id);}} style=${{background:'none',border:'none',color:C.txt3,cursor:'pointer',fontSize:22,lineHeight:1,padding:'4px 6px'}}>×</button>
+            </div>
+            <div style=${{display:'flex',gap:8,flexWrap:'wrap'}}>
+              ${prog.days.map((d,i)=>html`
+                <button key=${i} onClick=${()=>onStart(prog,i)} style=${{
+                  padding:'7px 13px',borderRadius:r.md,
+                  border:`1px solid ${C.bdr2}`,background:C.bg1,
+                  color:ACC,fontSize:13,cursor:'pointer',
+                }}>${d.name} <span style=${{color:C.txt3,fontSize:11}}>(${d.exercises.length})</span></button>`
+              )}
+            </div>
+          </${Card}>`
+        )
+      }
+    </div>`;
+}
+
+// ── History Tab ─────────────────────────────────────────────
+function HistTab({sessions,onView}){
+  return html`
+    <div style=${{padding:'22px 16px'}}>
+      <h2 style=${{margin:'0 0 18px',fontSize:22,fontWeight:700}}>Lịch sử</h2>
+      ${sessions.length===0
+        ?html`<${Empty} icon="📊" msg="Chưa có buổi tập nào" sub="Hoàn thành một buổi để thấy ở đây"/>`
+        :sessions.map(s=>html`
+          <${Card} key=${s.id} onClick=${()=>onView(s)} cx=${{cursor:'pointer'}}>
+            <div style=${{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+              <div>
+                <p style=${{margin:'0 0 2px',fontSize:14,fontWeight:600}}>${s.dayName}</p>
+                <p style=${{margin:'0 0 4px',color:C.txt2,fontSize:12}}>${s.progName}</p>
+                <p style=${{margin:0,color:C.txt3,fontSize:11}}>${fD(s.date)}</p>
+              </div>
+              <div style=${{textAlign:'right'}}>
+                <p style=${{margin:'0 0 2px',fontSize:14,fontWeight:700,color:ACC}}>${Math.round(s.totalVol||0)} kg</p>
+                <p style=${{margin:'0 0 2px',color:C.txt2,fontSize:12}}>${durS(s.endTime-s.startTime)}</p>
+                <p style=${{margin:0,color:C.txt3,fontSize:11}}>${s.exs?.length||0} bài</p>
+              </div>
+            </div>
+          </${Card}>`
+        )
+      }
+    </div>`;
+}
+
+// ── Active Workout ───────────────────────────────────────────
+function ActiveWorkout({workout,onChange,onFinish,onDiscard,onPickEx}){
+  const [elapsed,setElapsed]=useState(()=>Math.floor((Date.now()-workout.startTime)/1000));
+  const [rest,setRest]=useState(null);
+
+  useEffect(()=>{
+    const iv=setInterval(()=>setElapsed(e=>e+1),1000);
+    return()=>clearInterval(iv);
+  },[]);
+
+  useEffect(()=>{
+    if(!rest||rest.secs<=0)return;
+    const iv=setInterval(()=>setRest(r=>r&&r.secs>0?{...r,secs:r.secs-1}:r?{...r,secs:0}:null),1000);
+    return()=>clearInterval(iv);
+  },[rest&&rest.secs]);
+
+  const updEx=async(i,ex)=>onChange({...workout,exs:workout.exs.map((e,j)=>j===i?ex:e)});
+  const toggleSet=async(ei,si)=>{
+    const ex=workout.exs[ei];
+    const done=!ex.sets[si].done;
+    const sets=ex.sets.map((s,j)=>j===si?{...s,done}:s);
+    if(done)setRest({secs:90,max:90});
+    await updEx(ei,{...ex,sets});
+  };
+  const updSet=async(ei,si,f,v)=>{
+    const ex=workout.exs[ei];
+    await updEx(ei,{...ex,sets:ex.sets.map((s,j)=>j===si?{...s,[f]:v}:s)});
+  };
+  const addSet=async(ei)=>{
+    const ex=workout.exs[ei];
+    const last=ex.sets[ex.sets.length-1]||{};
+    await updEx(ei,{...ex,sets:[...ex.sets,{id:uid(),weight:last.weight||'',reps:last.reps||'',rpe:'',done:false}]});
+  };
+  const delSet=async(ei)=>{
+    const ex=workout.exs[ei];
+    if(ex.sets.length<=1)return;
+    await updEx(ei,{...ex,sets:ex.sets.slice(0,-1)});
+  };
+  const replEx=(ei)=>onPickEx(async e=>{
+    await onChange({...workout,exs:workout.exs.map((ex,i)=>i===ei?{...ex,exId:e.id,name:e.name}:ex)});
+  });
+  const addEx=()=>onPickEx(async e=>{
+    await onChange({...workout,exs:[...workout.exs,{id:uid(),exId:e.id,name:e.name,sets:[{id:uid(),weight:'',reps:'',rpe:'',done:false}],notes:''}]});
+  });
+  const vol=tVol(workout.exs);
+
+  return html`
+    <${Wrap}>
+      <div style=${{background:ACC,color:'#fff',padding:'14px 16px 12px',flexShrink:0}}>
+        <div style=${{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+          <div>
+            <p style=${{margin:0,fontSize:11,opacity:.75}}>${workout.progName}</p>
+            <h2 style=${{margin:0,fontSize:19,fontWeight:700}}>${workout.dayName}</h2>
+          </div>
+          <div style=${{textAlign:'right'}}>
+            <p style=${{margin:0,fontSize:25,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>${fT(elapsed)}</p>
+            <p style=${{margin:0,fontSize:11,opacity:.75}}>${Math.round(vol)} kg volume</p>
+          </div>
+        </div>
+        <div style=${{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <button onClick=${()=>{if(window.confirm('Huỷ buổi tập?'))onDiscard();}} style=${{background:'rgba(255,255,255,0.2)',border:'none',borderRadius:r.md,padding:'8px 14px',color:'#fff',fontSize:13,cursor:'pointer'}}>Huỷ</button>
+          <button onClick=${()=>{if(window.confirm('Kết thúc và lưu?'))onFinish();}} style=${{background:'#fff',border:'none',borderRadius:r.md,padding:'8px 18px',color:ACC,fontSize:14,fontWeight:700,cursor:'pointer'}}>✓ Xong</button>
+        </div>
+      </div>
+
+      ${rest!==null&&html`
+        <div style=${{background:'#fff4ef',padding:'10px 16px',display:'flex',alignItems:'center',gap:12,flexShrink:0,borderBottom:'1px solid #fad4c0'}}>
+          <div style=${{minWidth:58}}>
+            <p style=${{margin:0,fontSize:10,color:'#993c1d',fontWeight:600}}>NGHỈ</p>
+            <p style=${{margin:0,fontSize:24,fontWeight:700,color:rest.secs===0?C.green:ACC,fontVariantNumeric:'tabular-nums'}}>${fT(rest.secs)}</p>
+          </div>
+          <div style=${{flex:1,background:'#fad4c0',borderRadius:4,height:5}}>
+            <div style=${{background:rest.secs===0?C.green:ACC,borderRadius:4,height:5,width:`${(rest.secs/rest.max)*100}%`,transition:'width 1s linear'}}/>
+          </div>
+          ${rest.secs===0&&html`<span style=${{fontSize:13,fontWeight:600,color:C.green}}>Hết giờ! 🔔</span>`}
+          <button onClick=${()=>setRest(null)} style=${{background:'none',border:'none',color:'#993c1d',cursor:'pointer',fontSize:22,lineHeight:1,padding:4}}>×</button>
+        </div>
+      `}
+
+      <div style=${{flex:1,overflowY:'auto',paddingBottom:20,WebkitOverflowScrolling:'touch'}}>
+        ${workout.exs.map((ex,ei)=>html`
+          <div key=${ex.id} style=${{borderBottom:`1px solid ${C.bdr}`,padding:'14px 16px'}}>
+            <div style=${{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <p style=${{margin:0,fontSize:15,fontWeight:600,color:ACC}}>${ex.name}</p>
+              <button onClick=${()=>replEx(ei)} style=${{background:C.bg2,border:`1px solid ${C.bdr}`,borderRadius:r.md,padding:'5px 10px',fontSize:12,color:C.txt2,cursor:'pointer'}}>⇄ Thay</button>
+            </div>
+            <div style=${{display:'grid',gridTemplateColumns:'22px 1fr 1fr 52px 36px',gap:5,marginBottom:6}}>
+              ${['#','KG','REPS','RPE',''].map((h,i)=>html`<span key=${i} style=${{fontSize:10,fontWeight:600,color:C.txt3,textAlign:'center'}}>${h}</span>`)}
+            </div>
+            ${ex.sets.map((set,si)=>html`
+              <div key=${set.id} style=${{display:'grid',gridTemplateColumns:'22px 1fr 1fr 52px 36px',gap:5,marginBottom:7,alignItems:'center',opacity:set.done?.45:1}}>
+                <span style=${{fontSize:12,color:C.txt3,textAlign:'center'}}>${si+1}</span>
+                <input type="number" inputMode="decimal" placeholder="—" value=${set.weight}
+                  onInput=${e=>updSet(ei,si,'weight',e.target.value)}
+                  style=${{padding:'9px 3px',borderRadius:r.md,border:`1px solid ${C.bdr}`,fontSize:14,textAlign:'center',background:set.done?C.bg2:C.bg1,color:C.txt1}}
+                />
+                <input type="number" inputMode="numeric" placeholder="—" value=${set.reps}
+                  onInput=${e=>updSet(ei,si,'reps',e.target.value)}
+                  style=${{padding:'9px 3px',borderRadius:r.md,border:`1px solid ${C.bdr}`,fontSize:14,textAlign:'center',background:set.done?C.bg2:C.bg1,color:C.txt1}}
+                />
+                <input type="number" inputMode="numeric" placeholder="—" min="1" max="10" value=${set.rpe}
+                  onInput=${e=>updSet(ei,si,'rpe',e.target.value)}
+                  style=${{padding:'9px 3px',borderRadius:r.md,border:`1px solid ${C.bdr}`,fontSize:14,textAlign:'center',background:set.done?C.bg2:C.bg1,color:C.txt1}}
+                />
+                <button onClick=${()=>toggleSet(ei,si)} style=${{
+                  width:36,height:36,borderRadius:r.md,border:'none',cursor:'pointer',
+                  background:set.done?C.greenBg:C.bg3,
+                  color:set.done?C.green:C.txt3,fontSize:18,
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                }}>✓</button>
+              </div>`
+            )}
+            <div style=${{display:'flex',gap:8,marginTop:8}}>
+              <button onClick=${()=>addSet(ei)} style=${{background:C.bg2,border:`1px solid ${C.bdr}`,borderRadius:r.md,padding:'7px 13px',fontSize:12,color:C.txt2,cursor:'pointer'}}>+ Set</button>
+              ${ex.sets.length>1&&html`<button onClick=${()=>delSet(ei)} style=${{background:C.redBg,border:'none',borderRadius:r.md,padding:'7px 12px',fontSize:12,color:C.red,cursor:'pointer'}}>− Set</button>`}
+            </div>
+            <input type="text" placeholder="Ghi chú bài tập..." value=${ex.notes}
+              onInput=${e=>updEx(ei,{...ex,notes:e.target.value})}
+              style=${{marginTop:10,width:'100%',padding:'8px 11px',borderRadius:r.md,border:`1px solid ${C.bdr}`,fontSize:12,color:C.txt2,background:'#fafafa'}}
+            />
+          </div>`
+        )}
+        <div style=${{padding:'14px 16px'}}>
+          <button onClick=${addEx} style=${{width:'100%',padding:'13px',borderRadius:r.md,border:`1.5px dashed ${C.bdr2}`,background:'transparent',color:ACC,fontSize:13,cursor:'pointer'}}>
+            + Thêm bài tập
+          </button>
+        </div>
+      </div>
+    </${Wrap}>`;
+}
+
+// ── Create Program ───────────────────────────────────────────
+function CreateProg({exList,onSave,onClose}){
+  const [name,setName]=useState('');
+  const [days,setDays]=useState([{id:uid(),name:'',exs:[]}]);
+  const [pf,setPf]=useState(null);
+  const [search,setSearch]=useState('');
+
+  const filt=exList.filter(e=>!search||e.name.toLowerCase().includes(search.toLowerCase()));
+  const setDN=(i,v)=>setDays(d=>d.map((day,j)=>j===i?{...day,name:v}:day));
+  const addDay=()=>setDays(d=>[...d,{id:uid(),name:'',exs:[]}]);
+  const delDay=i=>setDays(d=>d.filter((_,j)=>j!==i));
+  const addExToDay=(di,ex)=>{setDays(d=>d.map((day,i)=>i===di?{...day,exs:[...day.exs,{exId:ex.id,name:ex.name,sets:3}]}:day));setPf(null);setSearch('');};
+  const delExFromDay=(di,ei)=>setDays(d=>d.map((day,i)=>i===di?{...day,exs:day.exs.filter((_,j)=>j!==ei)}:day));
+  const setSetsN=(di,ei,v)=>setDays(d=>d.map((day,i)=>i===di?{...day,exs:day.exs.map((e,j)=>j===ei?{...e,sets:Math.max(1,parseInt(v)||1)}:e)}:day));
+  const save=()=>{
+    if(!name.trim())return alert('Nhập tên chương trình!');
+    if(days.some(d=>!d.name.trim()))return alert('Nhập tên cho tất cả các ngày!');
+    if(days.some(d=>d.exs.length===0))return alert('Mỗi ngày cần ít nhất 1 bài tập!');
+    onSave({id:uid(),name:name.trim(),days:days.map(d=>({id:d.id,name:d.name,exercises:d.exs}))});
+  };
+
+  return html`
+    <${Wrap}>
+      <div style=${{padding:'13px 16px',borderBottom:`1px solid ${C.bdr}`,display:'flex',gap:10,alignItems:'center',flexShrink:0}}>
+        <button onClick=${onClose} style=${{background:'none',border:'none',cursor:'pointer',color:C.txt3,fontSize:22,lineHeight:1,padding:4}}>×</button>
+        <h2 style=${{margin:0,fontSize:19,fontWeight:700,flex:1}}>Tạo chương trình</h2>
+        <${Btn} onClick=${save}>Lưu</${Btn}>
+      </div>
+      <div style=${{flex:1,overflowY:'auto',padding:'16px',WebkitOverflowScrolling:'touch'}}>
+        <input type="text" placeholder="Tên chương trình (VD: Push Pull Legs)"
+          value=${name} onInput=${e=>setName(e.target.value)}
+          style=${{width:'100%',padding:'12px 14px',borderRadius:r.lg,border:`1px solid ${C.bdr2}`,fontSize:15,marginBottom:18,background:C.bg1,color:C.txt1,display:'block'}}
+        />
+        ${days.map((day,di)=>html`
+          <div key=${day.id} style=${{background:C.bg2,borderRadius:r.lg,padding:13,marginBottom:12}}>
+            <div style=${{display:'flex',gap:8,alignItems:'center',marginBottom:10}}>
+              <input type="text" placeholder="Tên ngày (Push, Chân, Full Body...)"
+                value=${day.name} onInput=${e=>setDN(di,e.target.value)}
+                style=${{flex:1,padding:'9px 11px',borderRadius:r.md,border:`1px solid ${C.bdr}`,fontSize:13,background:C.bg1,color:C.txt1}}
+              />
+              ${days.length>1&&html`<button onClick=${()=>delDay(di)} style=${{background:'none',border:'none',color:C.txt3,fontSize:22,cursor:'pointer',lineHeight:1,padding:4}}>×</button>`}
+            </div>
+            ${day.exs.map((pe,ei)=>html`
+              <div key=${ei} style=${{display:'flex',alignItems:'center',gap:8,background:C.bg1,borderRadius:r.md,padding:'8px 10px',marginBottom:7,border:`1px solid ${C.bdr}`}}>
+                <span style=${{flex:1,fontSize:13,color:C.txt1}}>${pe.name}</span>
+                <input type="number" min="1" max="20" value=${pe.sets}
+                  onInput=${e=>setSetsN(di,ei,e.target.value)}
+                  style=${{width:40,padding:'4px 3px',borderRadius:r.sm,border:`1px solid ${C.bdr}`,fontSize:12,textAlign:'center',color:C.txt1,background:C.bg2}}
+                />
+                <span style=${{fontSize:11,color:C.txt3}}>sets</span>
+                <button onClick=${()=>delExFromDay(di,ei)} style=${{background:'none',border:'none',color:C.txt3,fontSize:18,cursor:'pointer',lineHeight:1}}>×</button>
+              </div>`
+            )}
+            ${pf===di?html`
+              <div style=${{marginTop:8}}>
+                <input type="text" placeholder="Tìm bài tập..." value=${search}
+                  onInput=${e=>setSearch(e.target.value)}
+                  style=${{width:'100%',padding:'8px 11px',borderRadius:r.md,border:`1px solid ${C.bdr}`,fontSize:13,marginBottom:6,background:C.bg1,color:C.txt1,boxSizing:'border-box'}}
+                />
+                <div style=${{maxHeight:180,overflowY:'auto',background:C.bg1,borderRadius:r.md,border:`1px solid ${C.bdr}`}}>
+                  ${filt.map(e=>html`
+                    <button key=${e.id} onClick=${()=>addExToDay(di,e)} style=${{
+                      display:'block',width:'100%',background:'transparent',border:'none',
+                      padding:'9px 11px',textAlign:'left',fontSize:13,cursor:'pointer',color:C.txt1,
+                      borderBottom:`1px solid ${C.bdr}`,
+                    }}>${e.name} <span style=${{color:C.txt3,fontSize:11}}>${e.g}</span></button>`
+                  )}
+                </div>
+                <button onClick=${()=>{setPf(null);setSearch('');}} style=${{background:'none',border:'none',color:C.txt2,fontSize:12,cursor:'pointer',marginTop:6}}>Huỷ</button>
+              </div>`
+            :html`
+              <button onClick=${()=>setPf(di)} style=${{
+                marginTop:day.exs.length?8:0,width:'100%',background:'transparent',
+                border:`1.5px dashed ${C.bdr2}`,borderRadius:r.md,padding:'9px',
+                color:ACC,fontSize:12,cursor:'pointer',
+              }}>+ Thêm bài tập</button>`
+            }
+          </div>`
+        )}
+        <button onClick=${addDay} style=${{width:'100%',background:C.bg2,border:`1px solid ${C.bdr2}`,borderRadius:r.md,padding:'12px',fontSize:13,color:C.txt1,cursor:'pointer',marginBottom:40}}>+ Thêm ngày</button>
+      </div>
+    </${Wrap}>`;
+}
+
+// ── Pick Exercise ────────────────────────────────────────────
+function PickEx({exList,onPick,onClose,onAddEx}){
+  const [s,setS]=useState('');
+  const [nn,setNn]=useState('');
+  const [showA,setShowA]=useState(false);
+  const filt=s?exList.filter(e=>e.name.toLowerCase().includes(s.toLowerCase())||e.g.toLowerCase().includes(s.toLowerCase())):exList;
+  const groups=[...new Set(filt.map(e=>e.g))];
+  const addC=async()=>{
+    if(!nn.trim())return;
+    const ex={id:uid(),name:nn.trim(),g:'Tuỳ chỉnh'};
+    await onAddEx(ex);
+    onPick(ex);
+  };
+  return html`
+    <${Wrap}>
+      <div style=${{padding:'13px 16px 12px',borderBottom:`1px solid ${C.bdr}`,flexShrink:0}}>
+        <div style=${{display:'flex',gap:10,alignItems:'center',marginBottom:10}}>
+          <button onClick=${onClose} style=${{background:'none',border:'none',cursor:'pointer',color:C.txt3,fontSize:22,lineHeight:1,padding:4}}>×</button>
+          <h3 style=${{margin:0,fontSize:17,fontWeight:700}}>Chọn bài tập</h3>
+        </div>
+        <input type="text" placeholder="Tìm bài tập..." value=${s}
+          onInput=${e=>setS(e.target.value)}
+          style=${{width:'100%',padding:'10px 13px',borderRadius:r.lg,border:`1px solid ${C.bdr2}`,fontSize:13,background:C.bg1,color:C.txt1,boxSizing:'border-box'}}
+        />
+      </div>
+      <div style=${{flex:1,overflowY:'auto',padding:'8px 16px',WebkitOverflowScrolling:'touch'}}>
+        ${groups.map(g=>html`
+          <div key=${g}>
+            <${Label} t=${g} mt=${12}/>
+            ${filt.filter(e=>e.g===g).map(e=>html`
+              <button key=${e.id} onClick=${()=>onPick(e)} style=${{
+                display:'block',width:'100%',background:C.bg2,border:'none',
+                borderRadius:r.md,padding:'12px 13px',textAlign:'left',
+                fontSize:13,cursor:'pointer',marginBottom:6,color:C.txt1,
+              }}>${e.name}</button>`
+            )}
+          </div>`
+        )}
+        ${!showA
+          ?html`<button onClick=${()=>setShowA(true)} style=${{marginTop:16,marginBottom:40,width:'100%',background:'transparent',border:`1.5px dashed ${C.bdr2}`,borderRadius:r.md,padding:'12px',color:ACC,fontSize:13,cursor:'pointer'}}>+ Tạo bài tập mới</button>`
+          :html`
+            <div style=${{marginTop:16,marginBottom:40,background:C.bg2,borderRadius:r.lg,padding:13}}>
+              <p style=${{margin:'0 0 10px',fontSize:13,fontWeight:600}}>Bài tập mới</p>
+              <input type="text" placeholder="Tên bài tập..." value=${nn}
+                onInput=${e=>setNn(e.target.value)}
+                style=${{width:'100%',padding:'10px 12px',borderRadius:r.md,border:`1px solid ${C.bdr}`,fontSize:13,marginBottom:10,background:C.bg1,color:C.txt1,boxSizing:'border-box'}}
+              />
+              <div style=${{display:'flex',gap:8}}>
+                <${Btn} onClick=${addC} cx=${{flex:1,padding:'10px',display:'block'}}>Thêm</${Btn}>
+                <${Btn} onClick=${()=>setShowA(false)} variant="ghost">Huỷ</${Btn}>
+              </div>
+            </div>`
+        }
+      </div>
+    </${Wrap}>`;
+}
+
+// ── Session Detail ───────────────────────────────────────────
+function SessDetail({session,onClose}){
+  const dur=session.endTime-session.startTime;
+  const totalSets=session.exs?.reduce((t,e)=>t+e.sets.filter(s=>s.done).length,0)||0;
+  const stats=[
+    {l:'Tổng volume',v:`${Math.round(session.totalVol||0)} kg`},
+    {l:'Thời gian',v:durS(dur)},
+    {l:'Số bài tập',v:`${session.exs?.length||0} bài`},
+    {l:'Tổng set',v:`${totalSets} sets`},
+  ];
+  return html`
+    <${Wrap}>
+      <div style=${{padding:'13px 16px',borderBottom:`1px solid ${C.bdr}`,flexShrink:0}}>
+        <div style=${{display:'flex',gap:10,alignItems:'center'}}>
+          <button onClick=${onClose} style=${{background:'none',border:'none',cursor:'pointer',color:C.txt3,fontSize:22,lineHeight:1,padding:4}}>×</button>
+          <div>
+            <h2 style=${{margin:0,fontSize:19,fontWeight:700}}>${session.dayName}</h2>
+            <p style=${{margin:0,color:C.txt2,fontSize:12}}>${session.progName} · ${fD(session.date)}</p>
+          </div>
+        </div>
+      </div>
+      <div style=${{flex:1,overflowY:'auto',padding:'16px',WebkitOverflowScrolling:'touch'}}>
+        <div style=${{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:20}}>
+          ${stats.map(({l,v})=>html`
+            <div key=${l} style=${{background:C.bg2,borderRadius:r.md,padding:'11px 13px'}}>
+              <p style=${{margin:'0 0 3px',fontSize:11,color:C.txt3}}>${l}</p>
+              <p style=${{margin:0,fontSize:19,fontWeight:700,color:ACC}}>${v}</p>
+            </div>`
+          )}
+        </div>
+        ${session.exs?.map((ex,i)=>html`
+          <div key=${i} style=${{marginBottom:18}}>
+            <p style=${{margin:'0 0 8px',fontSize:14,fontWeight:700,color:ACC}}>${ex.name}</p>
+            ${ex.sets.filter(s=>s.done).map((set,j)=>html`
+              <div key=${j} style=${{display:'flex',gap:14,padding:'9px 12px',background:C.bg2,borderRadius:r.md,marginBottom:5,fontSize:13,alignItems:'center',color:C.txt1}}>
+                <span style=${{color:C.txt3,fontSize:11,minWidth:18}}>${j+1}</span>
+                <span><strong>${set.weight||'—'}</strong> kg</span>
+                <span><strong>${set.reps||'—'}</strong> reps</span>
+                ${set.rpe&&html`<span style=${{color:C.txt2,fontSize:12}}>RPE ${set.rpe}</span>`}
+              </div>`
+            )}
+            ${ex.notes&&html`<p style=${{margin:'6px 0 0',fontSize:12,color:C.txt2,fontStyle:'italic'}}>${ex.notes}</p>`}
+          </div>`
+        )}
+      </div>
+    </${Wrap}>`;
+}
+
+// ── Root App ─────────────────────────────────────────────────
+function GymPair(){
+  const [pid,setPid]=useState(null);
+  const [exList,setExList]=useState(EX);
+  const [progs,setProgs]=useState([]);
+  const [sessions,setSessions]=useState([]);
+  const [active,setActive]=useState(null);
+  const [tab,setTab]=useState('home');
+  const [pg,setPg]=useState(null);
+  const [pgCtx,setPgCtx]=useState(null);
+  const [ready,setReady]=useState(false);
+
+  useEffect(()=>{
+    if(!pid){setReady(false);return;}
+    (async()=>{
+      const[c,p,s,a]=await Promise.all([db.get(`c:${pid}`),db.get(`p:${pid}`),db.get(`s:${pid}`),db.get(`a:${pid}`)]);
+      setExList(c?[...EX,...c]:EX);
+      setProgs(p||[]);
+      setSessions(s||[]);
+      setActive(a||null);
+      setReady(true);
+    })();
+  },[pid]);
+
+  const saveP=p=>{setProgs(p);db.set(`p:${pid}`,p);};
+  const saveS=s=>{setSessions(s);db.set(`s:${pid}`,s);};
+  const saveA=a=>{setActive(a);db.set(`a:${pid}`,a);};
+  const saveC=list=>{setExList(list);db.set(`c:${pid}`,list.filter(e=>!EX.find(b=>b.id===e.id)));};
+
+  const startWorkout=(prog,di)=>{
+    const day=prog.days[di];
+    saveA({
+      id:uid(),progId:prog.id,progName:prog.name,dayName:day.name,
+      startTime:Date.now(),
+      exs:day.exercises.map(pe=>({
+        id:uid(),exId:pe.exId,name:pe.name,
+        sets:Array.from({length:pe.sets||3},()=>({id:uid(),weight:'',reps:'',rpe:'',done:false})),
+        notes:'',
+      })),
+    });
+    setPg(null);setTab('home');
+  };
+
+  const finishWorkout=()=>{
+    if(!active)return;
+    const sess={...active,endTime:Date.now(),totalVol:tVol(active.exs),date:new Date(active.startTime).toISOString().split('T')[0]};
+    saveS([sess,...sessions].slice(0,300));
+    db.set(`a:${pid}`,null);
+    setActive(null);
+  };
+
+  const discardWorkout=()=>{db.set(`a:${pid}`,null);setActive(null);};
+  const goPickEx=cb=>{setPg('pick-ex');setPgCtx({cb});};
+  const profile=PR.find(p=>p.id===pid);
+
+  if(!pid)return html`<${ProfileSelect} onSel=${p=>setPid(p)}/>`;
+  if(!ready)return html`<${Wrap} cx=${{alignItems:'center',justifyContent:'center',color:C.txt2,fontSize:14}}>Đang tải...</${Wrap}>`;
+
+  if(active){
+    if(pg==='pick-ex')return html`<${PickEx} exList=${exList} onPick=${e=>{pgCtx&&pgCtx.cb(e);setPg(null);setPgCtx(null);}} onClose=${()=>{setPg(null);setPgCtx(null);}} onAddEx=${ex=>saveC([...exList,ex])}/>`;
+    return html`<${ActiveWorkout} workout=${active} onChange=${saveA} onFinish=${finishWorkout} onDiscard=${discardWorkout} onPickEx=${goPickEx}/>`;
+  }
+  if(pg==='create-prog')return html`<${CreateProg} exList=${exList} onSave=${p=>{saveP([...progs,p]);setPg(null);}} onClose=${()=>setPg(null)}/>`;
+  if(pg==='sess-detail')return html`<${SessDetail} session=${pgCtx} onClose=${()=>{setPg(null);setPgCtx(null);}}/>`;
+
+  return html`
+    <${Wrap}>
+      <div style=${{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+        ${tab==='home'&&html`<${HomeTab} profile=${profile} progs=${progs} sessions=${sessions} onStart=${startWorkout} onView=${s=>{setPg('sess-detail');setPgCtx(s);}} onSwitch=${()=>setPid(null)}/>`}
+        ${tab==='progs'&&html`<${ProgsTab} progs=${progs} onNew=${()=>setPg('create-prog')} onDel=${id=>saveP(progs.filter(p=>p.id!==id))} onStart=${startWorkout}/>`}
+        ${tab==='hist'&&html`<${HistTab} sessions=${sessions} onView=${s=>{setPg('sess-detail');setPgCtx(s);}}/>`}
+      </div>
+      <${TabBar} tab=${tab} onTab=${setTab}/>
+    </${Wrap}>`;
+}
+
+render(html`<${GymPair}/>`,document.getElementById('root'));
+</script>
+</body>
+</html>
